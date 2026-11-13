@@ -43,6 +43,10 @@ Updated as each work package lands on `feat/factory-mvp`. This is the record beh
 | M3.6 | Failure-injection suite | no | no | pending | |
 | M3.7 | Multi-project isolation | no | no | pending | |
 | M3.8 | Approval gates | no | no | pending | |
+| M3.9 | Result envelope and decision requests | no | no | n/a | |
+| M3.10 | Transition evidence and protected paths | no | no | n/a | |
+| M3.11 | Triage stage | no | no | pending | |
+| M3.12 | Risk-based review routing | no | no | n/a | |
 | M4.1 | Model registry and agent resolution | no | no | pending | |
 | M4.2 | Codex adapter | no | no | pending | |
 | M4.3 | OpenCode adapter | no | no | pending | |

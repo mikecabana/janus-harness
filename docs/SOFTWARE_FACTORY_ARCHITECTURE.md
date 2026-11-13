@@ -143,6 +143,16 @@ These are not unresolved suggestions; they preserve the conversation's architect
 | GitHub sync | **Polling and reconciliation** | Public webhooks not required; optional private webhook relay later. |
 | Portability | **Compose + host runner + Git-backed config + backup/restore** | Not “one Compose file does everything”; be honest about the host `sbx` dependency. |
 
+**Prior art (PROPOSED; adopted by ADR 0010).** The patterns below are drawn from common practice in agent-driven issue-to-PR systems and the CI/CD and code-review tooling around them. Only ideas are adopted, no third-party code. Each pattern is adapted to this spec's sandboxed, human-merge model where it appears:
+
+| Pattern | Section |
+|---|---|
+| Agent results lead with a closed-enum verdict and a short summary; blocked results carry one specific decision request | §9.2 |
+| Every transition names the evidence it needs; the orchestrator refuses the move otherwise | §9.6 |
+| Optional read-only triage stage: accept (possibly rescoped), ask the author, or propose rejection; rates risk and surfaces | §8.8 |
+| Review stages and agent variants picked from a deterministic risk/surface table | §5.3 |
+| Re-test against the current base before merge | §8.6, §14.3 |
+
 ---
 
 ## 3. Logical and physical architecture
@@ -283,6 +293,12 @@ projects:
     requireHumanMergeApproval: true
     githubProjectV2: null
     validationProfile: nextjs
+    # PROPOSED (§5.3, §9.6): repo paths a branch may not change without a human
+    # decision, and paths whose change forces a review surface.
+    protectedPaths: [".github/workflows/**", "vitest.config.ts"]
+    pathSurfaces:
+      security: ["src/auth/**", "drizzle/**", "package.json", "pnpm-lock.yaml"]
+      ui: ["src/app/**", "src/components/**"]
 
   - id: polypolicies
     repository: your-org/polypolicies
@@ -343,6 +359,27 @@ completion:
 **Interpretation:** stages are deterministic orchestrator nodes. `kind: agent` dispatches an agent instance through a selected harness; `kind: validation` is a trusted runner-configured command stage; `kind: github-pull-request` is performed by the trusted GitHub service rather than delegated to Claude. There should be an explicit implementation/review correction loop bounded by `maxAttempts`; never assume a YAML DAG naturally describes cycles without defined semantics.
 
 A reduced **MVP workflow** can be `implement → validate → deliver`; add plan and review once the vertical slice works reliably.
+
+**Risk-based stage routing (PROPOSED, post-MVP).** When a workflow starts with a `triage` stage (§8.8), the review stages and their agents can come from triage's risk and surfaces through a deterministic table, instead of every reviewer running on every task:
+
+```yaml
+routing:
+  # Code-review agent by risk. There is always at least one review stage.
+  review-code:
+    low: code-reviewer-fast
+    medium: code-reviewer
+    high: code-reviewer
+  # Review stages added per surface.
+  surfaces:
+    ui: [review-ux]
+    security: [review-security]
+  # Applied when there is no triage result: the most conservative set.
+  default: { risk: high, surfaces: [ui, security] }
+```
+
+- The table selects **agent IDs**, not models (§1.2 principle 5). Each agent definition carries its own model preference, so a cheaper reviewer is a separate agent definition such as `code-reviewer-fast`.
+- Triage's rating is model output derived from untrusted issue text, so it can only add review on top of a configured floor. The project's `pathSurfaces` (§5.2) is evaluated by the orchestrator against the candidate SHA's diff after implementation, and can only add surfaces. A task triaged `low` whose diff touches `src/auth/**` still gets the security review.
+- The resolved stage set is written into the execution configuration snapshot (§5.1) and shown on the execution page with the reason each stage runs: risk, surface or path rule.
 
 ### 5.4 Agent definitions — accepted canonical format
 
@@ -751,6 +788,7 @@ If the issue changes while an agent runs, record the new issue version and apply
 - A closed, unmerged PR is **not** completion; mark blocked, cancelled, or requiring rework based on policy.
 - Force pushes are not allowed by default; any rework updates must be explicit and auditable.
 - Enforce branch protection / rulesets for approval. Prompt instructions alone are not a merge authorization mechanism.
+- **Re-test against the current base before merge (PROPOSED).** Validation (ADR 0003) tests the candidate SHA on the base it was cut from, and other PRs may merge first. The factory does not rebase (ADR 0008), so this is covered on GitHub: require branches to be up to date before merging, or use a merge queue, so required checks run on the merged result (§14.3). The execution page shows "base moved since validation" when the default branch head differs from the execution's recorded base SHA.
 
 ### 8.7 Optional planning pipeline (LATER)
 
@@ -759,6 +797,22 @@ Distinguish two independent product capabilities:
 - **Planning pipeline (later):** inspect code, draft recommendations and GitHub issues, decompose epics, and propose priorities for human acceptance.
 
 Draft planning output must not automatically trigger its own execution; require explicit issue approval/label to prevent recursive, runaway task creation.
+
+### 8.8 Optional triage stage (PROPOSED, post-MVP)
+
+A read-only agent stage that runs first, after a human has set `agent:ready`. It does not replace that approval: the label stays the trust gate. Triage decides how the issue should be built, and whether it can be built as one PR.
+
+| Verdict | Effect |
+|---|---|
+| `accept` | Writes a **scope brief** that later stages treat as binding. It may narrow an oversized issue to a first slice that is useful on its own (`rescoped: true`, listing what was left out), or settle a vague issue on the reading the code makes obvious. Rates `risk` (`low` / `medium` / `high`) and `surfaces` (`ui`, `security`) for routing (§5.3). |
+| `needs_info` | Posts the fewest questions that unblock the work, each answerable in a line, as one issue comment. The execution moves to `BLOCKED` (reason `awaiting_author`) and resumes at triage after a reply. |
+| `reject` | Posts the reasoning and moves the execution to `BLOCKED` with a proposed cancellation. The operator confirms. The factory never removes `agent:ready` on its own. |
+
+- Triage is isolated like the review stage (ADR 0003): its own sandbox, from which the runner takes only the schema-validated result (§9.2); anything it writes is discarded. Its instructions give it no reason to run commands, but that is an instruction, not enforcement (§14.4).
+- It reads the issue snapshot (§8.5) as quoted data, with comments filtered as for every other stage (ADR 0009 §3: repository owners, members and collaborators only).
+- Questions reach the author before any plan exists, so later stages never stall on a question only the author can answer. Later stages record what is still ambiguous as assumptions in their result. Assumptions that amount to product decisions (pricing, public copy, what is free versus paid) are raised as decision requests (§9.2), not settled silently.
+- An author reply that arrives after `agent:ready` is content the approving human has not seen. When the author is not an owner, member or collaborator, the comment filter would drop their answer, so resuming needs one operator acknowledgement in the Inbox (§12.1 E). The acknowledgement shows the new comments and any body edits, and admits only the replies it shows into the triage prompt.
+- The verdict, scope brief and any rescoping are posted on the issue, so the author sees what will be built. The issue body is never edited.
 
 ---
 
@@ -808,6 +862,20 @@ Every stage returns one of:
 
 Success is defined by machine-verifiable outputs wherever possible. A headless agent returning exit code 0 is necessary but not sufficient for implementation success.
 
+**Result envelope (PROPOSED).** Each agent stage's structured completion (§7.4) leads with a verdict from a closed enum for its stage kind, then a summary, then the detail:
+
+| Stage kind | Verdicts |
+|---|---|
+| triage (§8.8) | `accept`, `needs_info`, `reject` |
+| plan, implement | `done`, `blocked` |
+| review | `pass`, `changes` |
+
+- The orchestrator branches on the verdict and on verified artifacts, never on prose. A missing or unknown verdict is an invalid result (`failed_retryable` within budget) and never counts as a pass. A `done` verdict still needs a committed SHA and passing validation (§9.6).
+- `summary` is 3–5 short bullets for the dashboard. The detail (acceptance-criteria evidence, assumptions, review findings as `path:line` plus the requested fix) is stored as an artifact for the next stage and for humans.
+- Review results name the SHA they reviewed. Findings separate blocking `changes` from non-blocking notes, so a style preference doesn't cost a repair attempt.
+
+**Decision requests (PROPOSED).** Every `blocked` result, from an agent or from the factory itself (attempts exhausted, conflict, refused transition), carries a decision request: the one question a human must answer, the options with what each leads to, and the artifacts to read. It is posted as a single comment on the PR, or on the issue when there is no PR, and listed in the Approvals inbox (§12.1 E). "Please review" is not a decision request. When attempts run out, the request lists the outstanding findings by stage.
+
 ### 9.3 Scheduling policy
 
 - Poll for `agent:ready` and dashboard-queued tasks.
@@ -847,6 +915,20 @@ Later: dependency DAGs with task fanout and independent subtasks, each with uniq
 6. Any destructive action has an authorized actor, reason, and audit event.
 7. No sandbox is removed while unpushed/unfetched required commits remain or recovery is unresolved.
 8. Every status change is paired with an append-only event, in the same DB transaction where feasible.
+
+**Transition evidence (PROPOSED).** One transition function owns execution state, and each move names the evidence it requires. When evidence is missing, stale (for another SHA) or malformed, the move is refused: the refusal is an event with its reason, and the execution goes to `BLOCKED` with a decision request (§9.2) instead of being pushed forward some other way. Minimum evidence:
+
+| Transition | Evidence required |
+|---|---|
+| `IMPLEMENTING → VALIDATING` | Verdict `done`; at least one commit on the expected branch on top of the recorded base SHA; the fetched candidate SHA recorded (ADR 0003). |
+| `IMPLEMENTING → BLOCKED` | Verdict `blocked` with a decision request. |
+| `VALIDATING → REVIEWING` | A passing validation report for exactly the candidate SHA, and no change under the project's `protectedPaths`. |
+| `VALIDATING → IMPLEMENTING` | A failing report for the candidate SHA and attempts remaining; the failing output is the repair input. With no attempts left, `BLOCKED`. |
+| `REVIEWING → AWAITING_APPROVAL` | A schema-valid result from every routed review stage (§5.3) for the candidate SHA, all `pass`. |
+| `REVIEWING → IMPLEMENTING` | At least one `changes` verdict and attempts remaining; the findings are the repair input. With no attempts left, `BLOCKED`. |
+| `PR_OPEN → COMPLETED` | PR merged and required checks satisfied (invariant 5). |
+
+Validation commands are approved config (§14.2), but they run code the branch controls: package scripts, test-runner config, fixtures. `protectedPaths` (§5.2) lists repo files a branch may not modify or delete without a human decision, such as CI workflows or the test-runner config the validation profile depends on. It extends the runner's changed-path deny list (ADR 0009 §7), which stays as the last check before a push. A change under them goes to `BLOCKED` with a decision request rather than failing validation, which would only lead to repair attempts that cannot succeed. Tests are not protected by default, because features legitimately change them. Reviewers flag tests that were weakened, skipped or special-cased to pass.
 
 ---
 
@@ -1032,6 +1114,7 @@ The dashboard is a **control room for agent execution**, not another GitHub Issu
 - Human-required approval tasks: plan acceptance (optional), scope changes, stuck work, risky validation, PR readiness, retry beyond policy.
 - “Approve” action changes factory execution policy state; it **does not** override GitHub branch protection or merge the PR unless a separate, explicitly authorized feature exists.
 - Every approval records actor, decision, reason, and timestamp.
+- Decision requests (§9.2) show the question, the options and links to the artifacts. Answering one records the choice and starts the next action: rework with notes (ADR 0008), cancel, or accept as is. Triage acknowledgements (§8.8) show the author's new comments and body edits.
 
 **F. Agent Registry / Workflow Builder**
 - Browse `agents/*.md` with name, description, instructions, model/harness, supported capabilities.
@@ -1265,7 +1348,7 @@ Make the runner incapable of executing arbitrary *operator-supplied* shell comma
 1. **UI authentication:** signed, expiring sessions, secure cookies, CSRF defense, optional multi-user RBAC (`viewer`, `operator`, `admin`); LAN access alone is not authentication.
 2. **Repository allowlist:** GitHub App installed on specified repos; task/issue cannot redirect execution to another repo.
 3. **No broad agent GitHub token:** push, labels, and PR operations mediated by trusted runner/API; agent gets only necessary read access.
-4. **GitHub branch protection:** require human reviews and configured checks; agent cannot merge/deploy.
+4. **GitHub branch protection:** require human reviews and configured checks; agent cannot merge/deploy. Require branches to be up to date before merging, or use a merge queue, so required checks run against the current base (§8.6).
 5. **Per-stage capability enforcement:** immutable security policy maps to sandbox network/filesystem/tool restrictions. Unsupported deny semantics must block rather than be silently ignored.
 6. **Network restrictions:** explicit model/provider/registry/required domains; deny access to host control plane, private LAN services, metadata IPs, and sensitive local endpoints unless approved.
 7. **Resource/budget caps:** CPU, RAM, max runtime, max concurrent VMs, maximum attempts, provider rate limits and configurable spend ceilings.
@@ -1566,6 +1649,8 @@ These are **desired package scripts**: not evidence a repository containing thes
 - Native agent compilation, preservation of instruction body, warnings for unsupported fields.
 - Harness resolution (supported kit, auth, model, fallback, capabilities) and fail-closed rules.
 - Workflow DAG validation and stage transition invariant enforcement.
+- Transition evidence (§9.6): each transition refuses when its evidence is missing, written for another SHA, or malformed; a missing or unknown verdict never counts as a pass.
+- Stage routing (§5.3): `pathSurfaces` adds stages but never removes them; `default` applies without a triage result; at least one review stage always runs.
 - GitHub repo/issue identifiers, branch and sandbox name sanitization.
 - Retry budgets, concurrency admission, fairness, budget exhaustion.
 - Native stream parsers with chunk splits, invalid JSON, unknown event types, huge lines, UTF-8 boundaries.
@@ -1661,7 +1746,7 @@ These do **not** invalidate the accepted high-level architecture. They are delib
 | GitHub Projects v2 | Optional, discover/install after basic Issues work | App permissions and GraphQL complexity. |
 | Runner host privileged role | Dedicated service account | `sbx` remains powerful host-controlled capability. |
 | Model budgets | Hard time/attempt caps first, provider cost only if measured | Tokens/cost not consistently available across harnesses. |
-| Automatic agent choice | Fixed configured agent by stage | Auto-routing could silently choose a less capable/unexpected harness. |
+| Automatic agent choice | Fixed configured agent by stage | Auto-routing could silently choose a less capable/unexpected harness. The deterministic risk/surface table (§5.3) is still fixed configuration, not automatic choice. |
 | Multi-user control | One trusted operator MVP | RBAC and approval identity before wider LAN user access. |
 | Parallel subtasks | Future DAG with worktree isolation | Merge conflicts and shared state multiply complexity. |
 

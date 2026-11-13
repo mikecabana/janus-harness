@@ -1,10 +1,10 @@
 # Milestone 3 — Multi-project scheduling and the full workflow engine
 
-**Goal:** several repositories, the complete `plan → implement → validate → review → deliver` workflow with a bounded repair loop, and recovery that has been tested by breaking things.
+**Goal:** several repositories, the complete `plan → implement → validate → review → deliver` workflow with a bounded repair loop, and recovery that has been tested by breaking things. M3.9–M3.12 add the patterns from [ADR 0010](../adr/0010-prior-art-patterns.md): verdict-first results, evidence-checked transitions, an optional triage stage and risk-based review routing.
 
 **Exit condition (§17 Milestone 3):** at least two repositories run concurrent isolated work without cross-repo credential or path leaks, and without double execution after a restart.
 
-**Order:** M3.1 and M3.2 are independent. M3.3 needs M3.2. M3.4 needs M3.2. M3.5 is independent; M3.6 needs M3.5. M3.7 needs M3.1. M3.8 needs M3.2.
+**Order:** M3.1 and M3.2 are independent. M3.3 needs M3.2. M3.4 needs M3.2. M3.5 is independent; M3.6 needs M3.5. M3.7 needs M3.1. M3.8 needs M3.2. M3.9 needs M3.3. M3.10 needs M3.2 and M3.9. M3.11 needs M3.4 and M3.9. M3.12 needs M3.10 and M3.11.
 
 ---
 
@@ -66,10 +66,11 @@
 - Issue edited while running (§8.5): record the new version, and apply the project's policy, either continue with a visible warning or pause for a decision. The live prompt is never changed silently.
 - Label removed or issue closed while running (§8.3): apply the configured cancel or block rule, and only after the change is seen on two consecutive successful polls.
 - Periodic full reconciliation of every active task, PR and check, independent of `updated_at`.
+- Base freshness (§8.6, ADR 0010): read whether branch protection requires branches to be up to date or the repository uses a merge queue, and show a project warning when neither is set. The execution page shows "base moved since validation" when the default branch head differs from the execution's recorded base SHA.
 
-**Tests:** each rule against the fake GitHub, including a transient API failure that must not cancel work.
+**Tests:** each rule against the fake GitHub, including a transient API failure that must not cancel work; the base-freshness warning with and without the up-to-date rule; the "base moved" indicator after a simulated merge to the default branch.
 
-**Spec:** §8.3, §8.5, §8.6.
+**Spec:** §8.3, §8.5, §8.6, §14.3 item 4.
 
 ---
 
@@ -135,3 +136,71 @@
 **Tests:** a stage with an approval gate does not start until approved; denial moves to `BLOCKED` with the reason; every decision has an actor and a reason.
 
 **Spec:** §5.3, §9.1, §12.1 E.
+
+---
+
+## M3.9 — Result envelope and decision requests
+
+**Build**
+
+- The M1.5 completion contract becomes a per-stage-kind envelope (§9.2): a `verdict` from a closed enum (`triage`: `accept | needs_info | reject`; `plan` and `implement`: `done | blocked`; `review`: `pass | changes`), a `summary` of 3–5 bullets, then the detail as before. Existing `done | blocked` results stay valid.
+- Review results carry the SHA they reviewed. Findings from M3.3 keep their blocking flag, and only blocking findings produce `changes`.
+- A missing, unknown or schema-invalid verdict is `failed_retryable` while attempts remain, never a pass.
+- A `DecisionRequest` schema: one question, options (label plus what it leads to), and artifact links. It is required on every agent `blocked` result. The factory also generates one when attempts are exhausted (listing outstanding findings by stage), on a refused transition (M3.10) and on a protected-path hit.
+- Each decision request is posted once, through the GitHub outbox, as a comment on the PR, or on the issue when there is no PR. It appears in the Approvals inbox (M2.5), where answering it records the choice and starts the next action: rework with notes (M2.6), cancel, or accept as is.
+- The execution page (M2.3) and the fleet cards (M2.2) show the latest summary bullets.
+
+**Tests:** schema tests per stage kind; an unknown verdict never advances a stage; a `blocked` result without a decision request is rejected; exhausted attempts produce a request listing every outstanding blocking finding; one comment per request, even when the outbox retries.
+
+**Spec:** §9.2, §12.1 E, ADR 0010.
+
+---
+
+## M3.10 — Transition evidence and protected paths
+
+**Build**
+
+- The §9.6 evidence table as data in `packages/core`, next to the M1.3 transition table. Each guard returns the evidence it found or a typed refusal naming what was missing, stale (written for another SHA) or malformed.
+- A refusal appends an event with its reason and moves the execution to `BLOCKED` with a factory-generated decision request (M3.9). Nothing retries around a refusal.
+- `protectedPaths` in the project schema (§5.2), extending the M1.11 changed-path deny list ([ADR 0009](../adr/0009-implementation-defaults.md) §7). The orchestrator checks the candidate SHA's diff against the base at `VALIDATING → REVIEWING`. A hit goes to `BLOCKED` with a decision request: allow this change, or rework without it. The runner's push-time deny-list check stays as the last line.
+- `REVIEWING → AWAITING_APPROVAL` requires a result from every routed review stage for the candidate SHA; from M3.12 the routed set comes from the execution snapshot.
+
+**Tests:** for every row of the evidence table, the transition is refused when its evidence is missing, belongs to another SHA, or is malformed; a protected-path change reaches `BLOCKED`, not a repair attempt; a review result for an older SHA does not satisfy the review gate; property test that no sequence of inputs reaches `AWAITING_APPROVAL` without a passing validation report for the same SHA.
+
+**Spec:** §5.2, §9.6, §18.1, ADR 0010.
+
+---
+
+## M3.11 — Triage stage
+
+**Build**
+
+- `kind: triage` in the workflow schema, allowed only as the first stage, and `agents/triage.md`. A new `workflows/triaged.yaml` (`triage → plan → implement → validate → review → deliver`). `standard.yaml` is unchanged.
+- Isolation as for review (ADR 0003): a separate sandbox from a per-run checkout at the base SHA; the runner takes only the schema-validated result and discards the sandbox.
+- `accept`: the scope brief, rescoping flag and left-out items are stored as an artifact. Plan and implement stages receive it as binding input, and it is posted on the issue. `risk` and `surfaces` are stored on the execution for M3.12.
+- `needs_info`: the questions are posted as one issue comment and the execution moves to `BLOCKED` with reason `awaiting_author`. M3.4's reconciliation detects a reply after that comment and resumes at triage.
+- Replies from authors outside ADR 0009 §3's owner, member and collaborator filter: resuming waits for an operator acknowledgement in the Approvals inbox. The acknowledgement shows the new comments and body edits, and admits only those replies into the triage prompt.
+- `reject`: the reasoning is posted on the issue and the execution moves to `BLOCKED` with a decision request proposing cancellation. The factory never removes `agent:ready` itself.
+- The issue body is never edited.
+
+**Tests:** each verdict against the fake GitHub; a non-collaborator reply is not in the prompt until acknowledged; a reply from a third party does not resume the execution; the scope brief reaches the implement prompt; a triage sandbox that writes files changes nothing downstream.
+
+**Done when:** on the host, the disposable repository has an oversized issue that is rescoped, an unclear one that asks a question and resumes after a reply, and an out-of-scope one that is proposed for rejection.
+
+**Spec:** §8.5, §8.8, §14.2, ADR 0003, ADR 0009 §3, ADR 0010.
+
+---
+
+## M3.12 — Risk-based review routing
+
+**Build**
+
+- A `routing` block in the workflow schema (§5.3): the code-review agent by risk, extra review stages per surface, and a `default` for executions without a triage result. Every entry is an agent ID validated against the registry.
+- `pathSurfaces` in the project schema (§5.2), evaluated by the orchestrator on the candidate SHA's diff after implementation. It can only add surfaces.
+- The resolved review set is written into the execution configuration snapshot (§5.1) when triage completes, and again if `pathSurfaces` adds stages. Each stage records why it runs: risk, surface or path rule.
+- The execution page (M2.3) lists the routed stages and their reasons.
+- `agents/code-reviewer-fast.md`, `agents/ux-reviewer.md`, `agents/security-reviewer.md`.
+
+**Tests:** table tests for every risk and surface combination; at least one review stage always runs; `pathSurfaces` adds the security review to a `low` task whose diff touches a matching path and never removes a stage; `default` applies without triage; an unknown agent ID in `routing` fails workflow validation.
+
+**Spec:** §5.1, §5.2, §5.3, §18.1, §20, ADR 0010.

@@ -22,8 +22,8 @@ Where each part of the spec lands in the plan. Work package IDs refer to the mil
 |---|---|
 | §3 Architecture and deployment boundaries | M1.7, M1.11, M1.13 |
 | §5.1 Config precedence and snapshots | M1.1, M3.2 |
-| §5.2 Project registry | M1.1, M1.4, M4.6 |
-| §5.3 Workflow definition | M1.1, M1.3 (linear), M3.2 (full) |
+| §5.2 Project registry | M1.1, M1.4, M4.6, M3.10 (`protectedPaths`), M3.12 (`pathSurfaces`) |
+| §5.3 Workflow definition | M1.1, M1.3 (linear), M3.2 (full), M3.12 (risk-based routing) |
 | §5.4–5.6 Agent definitions | M1.5, M2.3 (loaded-instructions display) |
 | §6.1–6.3 Compatibility, import, export | M4.2, M4.3, M4.4, M4.5 |
 | §6.4–6.5 Types and resolution | M1.9 (Claude only), M4.1 (full) |
@@ -36,13 +36,14 @@ Where each part of the spec lands in the plan. Work package IDs refer to the mil
 | §8.1–8.3 Source of truth, labels, polling | M1.6, M3.4 |
 | §8.4 GitHub App | M1.6, ADR 0006 |
 | §8.5 Discovery and duplicates | M1.2, M1.4, M3.4 |
-| §8.6 PR delivery | M1.6, M2.6, ADR 0008 |
+| §8.6 PR delivery | M1.6, M2.6, M3.4 (base freshness), ADR 0008 |
 | §8.7 Planning pipeline | M5 |
-| §9.1–9.2 States and stage results | M1.3, M3.8 |
+| §8.8 Triage stage | M3.11, ADR 0010 |
+| §9.1–9.2 States and stage results | M1.3, M3.8, M3.9 (result envelope, decision requests) |
 | §9.3 Scheduling | M1.4, M1.7, M3.1 |
 | §9.4 Retry | M1.10, M2.5, M3.2 |
 | §9.5 Parallelism | M3.2 (sequential stages), M5 (fan-out) |
-| §9.6 Invariants | M1.3, M1.4 |
+| §9.6 Invariants | M1.3, M1.4, M3.10 (transition evidence) |
 | §10.1–10.2 Tables and constraints | M1.2 |
 | §10.3 Event model | M1.1, M1.9 |
 | §10.4 Artifacts and storage | M1.10, M2.8 |
@@ -50,7 +51,7 @@ Where each part of the spec lands in the plan. Work package IDs refer to the mil
 | §11.2 Browser endpoints | See the table below |
 | §11.3 Runner endpoints | M1.7, M1.11 |
 | §11.4–11.5 SSE | M2.1 |
-| §12 Dashboard | M1.12, M2.2–M2.7, M4.6 |
+| §12 Dashboard | M1.12, M2.2–M2.7, M3.9 (decision requests), M4.6 |
 | §12.3 Interactive terminal | M5 |
 | §13 Deployment | M1.13, M4.7 |
 | §14 Security | See the table below |
@@ -92,7 +93,7 @@ Where each part of the spec lands in the plan. Work package IDs refer to the mil
 | 1 | UI authentication, CSRF, roles | M1.7, M2.5, ADR 0007 | M1.7, M2.5 |
 | 2 | Repository allowlist | M1.1, M1.6 | M3.7 |
 | 3 | No broad agent GitHub token | M0.2 (doctor fails on a `github` secret), M1.11, ADR 0001, ADR 0002 | M1.11, M3.7 |
-| 4 | GitHub branch protection | Operator; M3.4 reads required checks | M1.14 (nothing merged) |
+| 4 | GitHub branch protection | Operator; M3.4 reads required checks and warns when branches need not be up to date | M1.14 (nothing merged), M3.4 |
 | 5 | Per-stage capability enforcement | M3.3 (review by discard), M4.1 (unsupported requirement blocks) | M3.3, M4.1 |
 | 6 | Network restrictions | ADR 0002, M0.3 probes 9 and 10, M2.7 | M3.7 |
 | 7 | Resource and budget caps | M1.8 (CPU, memory, timeouts), M1.7 (concurrency), M3.1 (budgets) | M1.8, M3.1 |
@@ -110,9 +111,9 @@ Control 5 has a known limit: `capabilities` in an agent file are recorded and di
 
 | Section | Work packages |
 |---|---|
-| §18.1 Unit tests | M1.1, M1.3, M1.5, M1.8, M1.9, M2.1, M2.8, M3.1, M3.2, M4.1 |
+| §18.1 Unit tests | M1.1, M1.3, M1.5, M1.8, M1.9, M2.1, M2.8, M3.1, M3.2, M3.9, M3.10, M3.12, M4.1 |
 | §18.2 Database and API integration | M1.4, M1.6, M1.7, M2.1 |
-| §18.3 Sandbox and Git end to end | M1.11, M1.14, M3.3, M3.7, M4.2 |
+| §18.3 Sandbox and Git end to end | M1.11, M1.14, M3.3, M3.7, M3.11, M4.2 |
 | §18.4 Failure injection | M1.14 (runner kill), M3.6 |
 | §18.5 UX acceptance | M2.2, M2.3, M2.5, M4.5, M4.6, M1.13 (LAN reachability) |
 | §18.6 MVP definition of done | M2 exit check |

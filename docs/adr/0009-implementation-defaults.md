@@ -1,8 +1,8 @@
 # ADR 0009 — Implementation defaults
 
-**Status:** Proposed. Accepted by merging the plan PR. Unlike ADRs 0001–0008, these items were **not** discussed one by one; each fills a gap the spec leaves open with the choice the implementer would otherwise make silently.
+**Status:** Accepted 2026-11-13 (by merging PR #1). Unlike ADRs 0001–0008, these items were **not** discussed one by one; each fills a gap the spec leaves open with the choice the implementer would otherwise make silently.
 
-Object to any item in review and it will be changed before code depends on it.
+To change an item, propose a superseding ADR before code depends on it.
 
 ## 1. Naming
 

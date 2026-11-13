@@ -12,7 +12,8 @@ The spec ([`SOFTWARE_FACTORY_ARCHITECTURE.md`](../SOFTWARE_FACTORY_ARCHITECTURE.
 | [0006](0006-github-authentication.md) | GitHub App in deployment, PAT for local tests | Accepted 2026-11-13 | §8.4 |
 | [0007](0007-dashboard-authentication.md) | App-local single operator, sessions owned by the API | Accepted 2026-11-13 | §3.2, §11.1, §14.5 |
 | [0008](0008-post-pr-rework.md) | Manual rework after the PR is open | Accepted 2026-11-13 | §8.6, §9.1, §9.4 |
-| [0009](0009-implementation-defaults.md) | Implementation defaults | Proposed; accepted by merging the plan PR | several |
+| [0009](0009-implementation-defaults.md) | Implementation defaults | Accepted 2026-11-13 | several |
+| [0010](0010-prior-art-patterns.md) | Patterns adopted from industry practice | Accepted 2026-11-13 | §5.2, §5.3, §8.6, §8.8, §9.2, §9.6, §12.1 E, §14.3 |
 
 ## Format
 
