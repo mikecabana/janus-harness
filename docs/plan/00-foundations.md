@@ -4,7 +4,7 @@
 
 **Exit condition (§17 Milestone 0):** a runner-owned, unattended test task produces a commit in a disposable sandbox, and that commit is fetched into a factory-owned checkout without touching any interactive user's repository. `docs/COMPATIBILITY.md` records the verified behaviour and the installed versions.
 
-**Where this runs:** on the host server. The implementing session is resumed there before M0.2 starts. M0.1 needs no host access and can be done from anywhere.
+**Where this runs:** on the host server. The implementing session is resumed there before M0.2 starts. M0.1 needs no host access and can be done from anywhere. Later milestones are built there too (see [Where the work runs](README.md#where-the-work-runs)).
 
 **Order:** M0.1 → M0.2 → M0.3 → M0.4 → M0.5.
 
@@ -72,7 +72,7 @@ A script-driven probe suite, kept in the repo as `packages/sandbox/probe/` so it
 | 13 | What does `sbx events --json` emit across create, exec, stop and rm? | Health and inventory |
 | 14 | Does the sandbox survive a `sbx daemon restart` and a host reboot, and in what state? | Recovery (§15) |
 
-**Done when:** every row has a recorded answer in `docs/COMPATIBILITY.md`. A row whose answer contradicts an ADR stops the milestone until a superseding ADR is approved.
+**Done when:** every row has a recorded answer in `docs/COMPATIBILITY.md`, and the raw outputs behind rows 3, 4, 8, 9 and 13 are committed under `tests/fixtures/sbx/<version>/` with account identifiers removed. CI cannot run `sbx`, so these fixtures are what the fake adapter replays. A row whose answer contradicts an ADR stops the milestone until a superseding ADR is approved.
 
 **Spec:** §7.1 VERIFY list, §17 Milestone 0, §20.
 
