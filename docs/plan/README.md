@@ -17,6 +17,7 @@ This plan turns the spec into an ordered set of work packages. Each work package
 | [`04-harnesses-portability.md`](04-harnesses-portability.md) | Milestone 4: Codex/OpenCode/Grok, agent registry, backup and restore |
 | [`05-later.md`](05-later.md) | Milestone 5: outline only |
 | [`traceability.md`](traceability.md) | Where each spec requirement, security control and acceptance test lands |
+| [`PROGRESS.md`](PROGRESS.md) | What has been built, tested and demonstrated so far |
 
 ## Feasibility review
 
@@ -66,6 +67,7 @@ Decisions made with the operator on 2026-11-13.
 | GitHub authentication | GitHub App in deployment; PAT provider for local smoke tests only | [ADR 0006](../adr/0006-github-authentication.md) |
 | Dashboard login | App-local single operator; sessions owned by the API | [ADR 0007](../adr/0007-dashboard-authentication.md) |
 | After the PR is open | Observe only; a manual Rework action adds commits to the same branch | [ADR 0008](../adr/0008-post-pr-rework.md) |
+| Delivery | One branch and one PR when Milestones 0–4 are complete; no per-package PRs | [How implementation proceeds](#how-implementation-proceeds) |
 | Where the work runs | The implementing session runs on the host for every milestone, for now | [Where the work runs](#where-the-work-runs) |
 
 [ADR 0009](../adr/0009-implementation-defaults.md) collects smaller defaults that were **not** discussed one by one (naming, first workflow, which issue comments reach the prompt, notifications, commit identity, where validation commands live, a changed-path deny list, initial limits, retention, tooling). Review it with the same care as the rest; merging this PR approves it.
@@ -92,11 +94,11 @@ Work package IDs are `M<milestone>.<n>`. Within a milestone, the "Depends on" li
 
 ## How implementation proceeds
 
-1. **One pull request per work package**, branched from `main`, named `m<milestone>-<n>-<slug>`. Small adjacent packages may share a PR when splitting them would leave `main` unbuildable.
-2. **Every PR is green before review:** `pnpm lint`, `pnpm typecheck`, `pnpm test`. Integration tests that need Postgres run against a container; tests that need a live `sbx` are opt-in and run on the host (see [Where the work runs](#where-the-work-runs)).
+1. **One branch, one pull request.** All of Milestones 0–4 are built on `feat/factory-mvp`, and the PR is opened once they are complete. There are no intermediate PRs. Each work package is one commit, or a short series, whose message starts with its ID (`M1.3: ...`), so the final PR can still be read package by package. Milestone 5 stays an outline and is not part of that PR.
+2. **Every work package is green before the next one starts:** `pnpm lint`, `pnpm typecheck`, `pnpm test`. Integration tests that need Postgres run against a container; tests that need a live `sbx` are opt-in and run on the host (see [Where the work runs](#where-the-work-runs)).
 3. **Tests arrive with the code they cover** (§21 item 9). Parser fixtures come from real recorded streams captured in Milestone 0, not from hand-written guesses.
 4. **Deviations become ADRs** (§21 item 12). If a probe contradicts an ADR or the spec, the work stops at that package, a new or superseding ADR is proposed, and it is approved before code depends on it.
-5. **Nothing is claimed as working until it has been run.** Each PR description states what was executed and what was not.
+5. **Nothing is claimed as working until it has been run.** [`PROGRESS.md`](PROGRESS.md) records, per work package, whether it is built, whether its tests pass, and whether its "done when" has been demonstrated on the host. The final PR description is written from it.
 
 ## Where the work runs
 
