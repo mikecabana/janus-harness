@@ -48,7 +48,7 @@ The spec was checked against the current Docker Sandboxes documentation and the 
 
 ### Not yet verified
 
-Anything that needs a live `sbx` run. The review was done from inside an `sbx` sandbox, which has no `sbx` binary. These items are the Milestone 0 probes in [`00-foundations.md`](00-foundations.md), and they run on the host before any adapter code is written.
+Anything that needs a live `sbx` run. The review was done from inside an `sbx` sandbox, which cannot run `sbx` itself (no binary, no `/dev/kvm`, no virtualization CPU flags). These items are the Milestone 0 probes in [`00-foundations.md`](00-foundations.md), and they run on the host before any adapter code is written.
 
 ## Decision log
 
@@ -66,7 +66,7 @@ Decisions made with the operator on 2026-11-13.
 | GitHub authentication | GitHub App in deployment; PAT provider for local smoke tests only | [ADR 0006](../adr/0006-github-authentication.md) |
 | Dashboard login | App-local single operator; sessions owned by the API | [ADR 0007](../adr/0007-dashboard-authentication.md) |
 | After the PR is open | Observe only; a manual Rework action adds commits to the same branch | [ADR 0008](../adr/0008-post-pr-rework.md) |
-| Host probes | The implementing session is resumed on the host before Milestone 0 starts, and runs the probes directly | [`00-foundations.md`](00-foundations.md) |
+| Where the work runs | The implementing session runs on the host for every milestone, for now | [Where the work runs](#where-the-work-runs) |
 
 [ADR 0009](../adr/0009-implementation-defaults.md) collects smaller defaults that were **not** discussed one by one (naming, first workflow, which issue comments reach the prompt, notifications, commit identity, where validation commands live, a changed-path deny list, initial limits, retention, tooling). Review it with the same care as the rest; merging this PR approves it.
 
@@ -93,10 +93,21 @@ Work package IDs are `M<milestone>.<n>`. Within a milestone, the "Depends on" li
 ## How implementation proceeds
 
 1. **One pull request per work package**, branched from `main`, named `m<milestone>-<n>-<slug>`. Small adjacent packages may share a PR when splitting them would leave `main` unbuildable.
-2. **Every PR is green before review:** `pnpm lint`, `pnpm typecheck`, `pnpm test`. Integration tests that need Postgres run against a container; tests that need a live `sbx` are opt-in and run on the host.
+2. **Every PR is green before review:** `pnpm lint`, `pnpm typecheck`, `pnpm test`. Integration tests that need Postgres run against a container; tests that need a live `sbx` are opt-in and run on the host (see [Where the work runs](#where-the-work-runs)).
 3. **Tests arrive with the code they cover** (§21 item 9). Parser fixtures come from real recorded streams captured in Milestone 0, not from hand-written guesses.
 4. **Deviations become ADRs** (§21 item 12). If a probe contradicts an ADR or the spec, the work stops at that package, a new or superseding ADR is proposed, and it is approved before code depends on it.
 5. **Nothing is claimed as working until it has been run.** Each PR description states what was executed and what was not.
+
+## Where the work runs
+
+The implementing session runs on the host server for every milestone, for now.
+
+- **Why:** the development sandbox cannot run `sbx` (no binary, no `/dev/kvm`, no virtualization CPU flags). The probes, the live adapter tests, deployment and every milestone's exit check need the host, and working in one place avoids handing results back and forth.
+- **Accounts:** the session runs under the operator's own account. Commands that must run as `factory` (probes, the runner, smoke tests) use whatever access the operator grants for that, for example `sudo -u factory`. M0.2 records which.
+- **Scope on the host:** the session touches only this repository, `/var/lib/factory`, `factory-` sandboxes and the disposable GitHub repository. Anything else on the server (Traefik config, system services, other repositories) is changed only with the operator's go-ahead at that step.
+- **Fixtures are still recorded.** CI cannot run `sbx` either, so M0.3 commits raw `sbx` output for the fake adapter to replay.
+
+Moving later milestones into a sandbox remains possible. The host-dependent "done when" steps would then become scripts the operator runs. It is not planned.
 
 ## Operator prerequisites
 
@@ -104,7 +115,7 @@ These need the operator, because they involve accounts, secrets or host privileg
 
 | Needed by | Prerequisite |
 |---|---|
-| M0 | Resume the implementing session on the host server. |
+| M0 | Resume the implementing session on the host server, with a way for it to run commands as `factory`. |
 | M0 | A dedicated `factory` UNIX account with `sbx` installed, `sbx login` done with a Docker PAT, and the Balanced network preset selected. |
 | M0 | One interactive Claude sign-in as the `factory` account (host-side OAuth), or an Anthropic API key stored with `sbx secret set anthropic`. |
 | M0 | A disposable GitHub repository for smoke tests. |
