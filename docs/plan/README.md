@@ -69,8 +69,11 @@ Decisions made with the operator on 2026-11-13.
 | After the PR is open | Observe only; a manual Rework action adds commits to the same branch | [ADR 0008](../adr/0008-post-pr-rework.md) |
 | Delivery | One branch and one PR when Milestones 0–4 are complete; no per-package PRs | [How implementation proceeds](#how-implementation-proceeds) |
 | Where the work runs | The implementing session runs on the host for every milestone, for now | [Where the work runs](#where-the-work-runs) |
+| Patterns from industry practice | Verdict-first results, evidence-checked transitions, optional triage, risk-based review routing, base freshness; added to the spec as PROPOSED and built in M3.9–M3.12 | [ADR 0010](../adr/0010-prior-art-patterns.md) |
 
-[ADR 0009](../adr/0009-implementation-defaults.md) collects smaller defaults that were **not** discussed one by one (naming, first workflow, which issue comments reach the prompt, notifications, commit identity, where validation commands live, a changed-path deny list, initial limits, retention, tooling). Review it with the same care as the rest; merging this PR approves it.
+[ADR 0010](../adr/0010-prior-art-patterns.md) was approved by merging PR #2.
+
+[ADR 0009](../adr/0009-implementation-defaults.md) collects smaller defaults that were **not** discussed one by one (naming, first workflow, which issue comments reach the prompt, notifications, commit identity, where validation commands live, a changed-path deny list, initial limits, retention, tooling). It was approved by merging PR #1.
 
 ## Milestone map
 
@@ -86,7 +89,7 @@ M0 Foundations ──► M1 Vertical slice ──► M2 Control room ──► M
 | M0 | 5 | A runner-owned unattended task produces a commit in a disposable sandbox and it is fetched into a factory-owned checkout. `docs/COMPATIBILITY.md` records the verified `sbx` and Claude Code behaviour. |
 | M1 | 14 | One issue labelled `agent:ready` becomes a PR with a stable execution ID and a validated SHA, with no duplicate dispatch and no automatic merge. |
 | M2 | 8 | The operator can diagnose any execution, cancel, retry and rework it from the dashboard without attaching to a sandbox. This milestone completes the spec's MVP definition (§18.6). |
-| M3 | 8 | Two repositories run concurrent isolated work with no cross-repo leaks and no double execution after a restart. |
+| M3 | 12 | Two repositories run concurrent isolated work with no cross-repo leaks and no double execution after a restart. |
 | M4 | 8 | A new host can be deployed from Git plus a restored DB, and one workflow uses two different verified harnesses. |
 | M5 | outline | Not scheduled. |
 
@@ -126,6 +129,7 @@ These need the operator, because they involve accounts, secrets or host privileg
 | M1 | Branch protection on the target repository requiring one approving review. |
 | M2 | Nothing new. |
 | M3 | A second repository with the GitHub App installed. |
+| M3 | Branch protection on target repositories also requiring branches to be up to date before merging, or a merge queue (M3.4, ADR 0010). |
 | M4 | Credentials for any additional harness to be enabled (OpenAI for Codex, and so on). |
 
 ## Standing constraints
